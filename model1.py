@@ -60,7 +60,7 @@ class ModelFirst:
             if v >= 450:
                 recommend_genres.append(k)
 
-        corr = np.load('/content/drive/MyDrive/data/paper_corr_save.npy')
+        corr = np.load('/content/drive/MyDrive/data/corr_save.npy')
 
         genre_title = df.columns
         genre_list = list(genre_title)
