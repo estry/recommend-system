@@ -10,17 +10,28 @@ Original file is located at
 import pandas as pd
 import numpy as np
 import math
+import operator
 from ast import literal_eval
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.metrics.pairwise import linear_kernel, cosine_similarity
 from sklearn.decomposition import TruncatedSVD
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
+# 수정계획 1 : 상위 한개의 장르만 추출하는데 그게 아니라 상위 5개의 장르를 뽑아
+#             그 중 선택한 장르와 가장 상관관계가 높은 장르를 추천하는 것을 어떨까?
 class ModelFirst:
     def model1(self, selected_genres):
         df = pd.read_csv('/content/drive/MyDrive/data/user_pref.csv')
-        new_movie_data = pd.read_csv('/content/drive/MyDrive/data/new_movie_data.csv')
+
+        user_pref = df.to_numpy()
+        transformer = StandardScaler()
+        transformer.fit(user_pref)
+        standard_user_pref = transformer.transform(user_pref)
+        df = pd.DataFrame(user_pref, columns=df.columns)
+        
         first_genre_index = df[selected_genres[0]].sort_values(ascending=False).head(1400).index
         second_genre_index = df[selected_genres[1]].sort_values(ascending=False).head(1400).index
+        
         common_index = []
         for idx in first_genre_index:
             if idx in second_genre_index:
@@ -32,32 +43,56 @@ class ModelFirst:
             common_df.iloc[i] = df.iloc[idx]
             i = i + 1
 
-        common_np = common_df.to_numpy()
-        # 장르 유사도 계산
-        vector = TfidfVectorizer()
-        trans_data = np.array(new_movie_data['genres'].tolist())
-        movie_genre_tfidf = vector.fit_transform(trans_data).toarray()
+        # common_np = common_df.to_numpy()
+        index = common_df.index
+        result_dict = {}
+        for i in index:
+            sorted_tuple = common_df.iloc[i].sort_values(ascending=False)
+            for genre in sorted_tuple.head(5).index.tolist():
+                if genre not in result_dict and genre not in selected_genres:
+                    result_dict[genre] = 0
+                if genre not in selected_genres:
+                    result_dict[genre] += 1
 
-        SVD = TruncatedSVD(n_components=8)
-        matrix = SVD.fit_transform(movie_genre_tfidf.T)
-        matrix.shape
-        corr = np.corrcoef(matrix)
+        sorted_result_dict = sorted(result_dict.items(), key=operator.itemgetter(1), reverse=True)
+        recommend_genres = []
+        for k,v in sorted_result_dict:
+            if v >= 450:
+                recommend_genres.append(k)
+
+        corr = np.load('/content/drive/MyDrive/data/paper_corr_save.npy')
 
         genre_title = df.columns
         genre_list = list(genre_title)
-        first_corr_idx = genre_list.index(selected_genres[0])
-        second_corr_idx = genre_list.index(selected_genres[1])
-        common_corr = corr[first_corr_idx][second_corr_idx]
+        first_corr_list = []
+        second_corr_list = []
+        first_idx= genre_list.index(selected_genres[0])
+        second_idx = genre_list.index(selected_genres[1])
+        for g in recommend_genres:
+            idx = genre_list.index(g)
+            first_corr_value = corr[first_idx][idx]
+            first_corr_list.append(first_corr_value)
+            second_corr_value = corr[second_idx][idx]
+            second_corr_list.append(second_corr_value)
 
-        result_np = common_np * common_corr
-        result_df = pd.DataFrame(result_np, columns=genre_title)
-        result = result_df.max().idxmax()
+        mean_corr_list = np.array(first_corr_list) + np.array(second_corr_list)
+        mean_corr_list = mean_corr_list / 2
+
+        max = mean_corr_list.max()
+        mean_list = mean_corr_list.tolist()
+        mean_idx = mean_list.index(max)
+
+        result = recommend_genres[mean_idx]
+        
+        while(True): 
+            if result in selected_genres:
+                result_df.drop(result, axis= 1, inplace=True)
+                result = result_df.max().idxmax()
+            else:
+                break
+
         temp = selected_genres
         result = list(result.split())
         result = temp+result
         return result
 
-if __name__ == "__main__":
-    selected_genre = ['Horror', 'Thriller']
-    r = model1(selected_genre)
-    print(r)
